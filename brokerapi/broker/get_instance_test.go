@@ -103,7 +103,6 @@ var _ = Describe("GetInstance", func() {
 	When("instance exists and provision succeeded", func() {
 		BeforeEach(func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetServiceInstanceDetailsReturns(
 				storage.ServiceInstanceDetails{
 					GUID:             instanceID,
@@ -114,6 +113,7 @@ var _ = Describe("GetInstance", func() {
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
 				}, nil)
+			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
 		})
 
@@ -129,16 +129,16 @@ var _ = Describe("GetInstance", func() {
 			Expect(response.PlanID).To(Equal(planID))
 			Expect(response.Parameters).To(BeEquivalentTo(provisionParams))
 			Expect(response.DashboardURL).To(BeEmpty()) // Broker does not set dashboard URL
-			Expect(response.Metadata).To(BeEmpty())     // Broker does not support instance metadata
+			Expect(response.Metadata).To(BeZero())      // Broker does not support instance metadata
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
 
-			By("validating service provider asked for instance status")
-			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(1))
-
 			By("validating storage is asked for instance details")
 			Expect(fakeStorage.GetServiceInstanceDetailsCallCount()).To(Equal(1))
+
+			By("validating service provider asked for instance status")
+			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(1))
 
 			By("validating storage is asked for provision request details")
 			Expect(fakeStorage.GetProvisionRequestDetailsCallCount()).To(Equal(1))
@@ -159,19 +159,19 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(apiresponses.FailureResponse)
+			s, isFailureResponse := err.(*apiresponses.FailureResponse)
 			Expect(isFailureResponse).To(BeTrue())                            // must be a failure response
-			Expect(s.Error()).To(Equal("Not Found"))                          // must contain "Not Found" error message
+			Expect(s.Error()).To(Equal("not found"))                          // must contain "Not Found" error message
 			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
 
-			By("validating service provider is not asked for instance status")
-			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(0))
-
 			By("validating storage is not asked for instance details")
 			Expect(fakeStorage.GetServiceInstanceDetailsCallCount()).To(Equal(0))
+
+			By("validating service provider is not asked for instance status")
+			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(0))
 
 			By("validating storage is not asked for provision request details")
 			Expect(fakeStorage.GetProvisionRequestDetailsCallCount()).To(Equal(0))
@@ -181,6 +181,16 @@ var _ = Describe("GetInstance", func() {
 	When("instance exists and provision is in progress", func() {
 		BeforeEach(func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
+			fakeStorage.GetServiceInstanceDetailsReturns(
+				storage.ServiceInstanceDetails{
+					GUID:             instanceID,
+					Name:             "test-instance",
+					Outputs:          storage.JSONObject{},
+					ServiceGUID:      serviceID,
+					PlanGUID:         planID,
+					SpaceGUID:        spaceID,
+					OrganizationGUID: orgID,
+				}, nil)
 			fakeServiceProvider.PollInstanceReturns(false, "", models.ProvisionOperationType, nil) // Operation status is provision in progress
 		})
 		// According to OSB Spec, broker must return 404 in case provision is in progress
@@ -194,19 +204,19 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(apiresponses.FailureResponse)
+			s, isFailureResponse := err.(*apiresponses.FailureResponse)
 			Expect(isFailureResponse).To(BeTrue())                            // must be a failure response
-			Expect(s.Error()).To(Equal("Not Found"))                          // must contain "Not Found" error message
+			Expect(s.Error()).To(Equal("not found"))                          // must contain "not found" error message
 			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
 
+			By("validating storage is asked for instance details")
+			Expect(fakeStorage.GetServiceInstanceDetailsCallCount()).To(Equal(1))
+
 			By("validating service provider is asked for instance status")
 			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(1))
-
-			By("validating storage is not asked for instance details")
-			Expect(fakeStorage.GetServiceInstanceDetailsCallCount()).To(Equal(0))
 
 			By("validating storage is not asked for provision request details")
 			Expect(fakeStorage.GetProvisionRequestDetailsCallCount()).To(Equal(0))
@@ -217,6 +227,16 @@ var _ = Describe("GetInstance", func() {
 	When("instance exists and update is in progress", func() {
 		BeforeEach(func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
+			fakeStorage.GetServiceInstanceDetailsReturns(
+				storage.ServiceInstanceDetails{
+					GUID:             instanceID,
+					Name:             "test-instance",
+					Outputs:          storage.JSONObject{},
+					ServiceGUID:      serviceID,
+					PlanGUID:         planID,
+					SpaceGUID:        spaceID,
+					OrganizationGUID: orgID,
+				}, nil)
 			fakeServiceProvider.PollInstanceReturns(false, "", models.UpdateOperationType, nil) // Operation status is update in progress
 		})
 		It("returns status code 422 (Unprocessable Entity) and error code ConcurrencyError", func() {
@@ -229,7 +249,7 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(apiresponses.FailureResponse)
+			s, isFailureResponse := err.(*apiresponses.FailureResponse)
 			Expect(isFailureResponse).To(BeTrue())                                       // must be a failure response
 			Expect(s.Error()).To(Equal("ConcurrencyError"))                              // must contain "ConcurrencyError" error message
 			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusUnprocessableEntity)) // status code must be 404
@@ -237,11 +257,11 @@ var _ = Describe("GetInstance", func() {
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
 
+			By("validating storage is asked for instance details")
+			Expect(fakeStorage.GetServiceInstanceDetailsCallCount()).To(Equal(1))
+
 			By("validating service provider is asked for instance status")
 			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(1))
-
-			By("validating storage is not asked for instance details")
-			Expect(fakeStorage.GetServiceInstanceDetailsCallCount()).To(Equal(0))
 
 			By("validating storage is not asked for provision request details")
 			Expect(fakeStorage.GetProvisionRequestDetailsCallCount()).To(Equal(0))
@@ -252,7 +272,6 @@ var _ = Describe("GetInstance", func() {
 	When("service_id is not set", func() {
 		BeforeEach(func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetServiceInstanceDetailsReturns(
 				storage.ServiceInstanceDetails{
 					GUID:             instanceID,
@@ -263,6 +282,7 @@ var _ = Describe("GetInstance", func() {
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
 				}, nil)
+			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
 		})
 		It("ignores service_id and returns instance details", func() {
@@ -278,7 +298,6 @@ var _ = Describe("GetInstance", func() {
 	When("service_id does not match service for instance", func() {
 		BeforeEach(func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetServiceInstanceDetailsReturns(
 				storage.ServiceInstanceDetails{
 					GUID:             instanceID,
@@ -289,9 +308,10 @@ var _ = Describe("GetInstance", func() {
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
 				}, nil)
+			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
 		})
-		It("returns 404 (Not Found)", func() {
+		It("returns 404 (not found)", func() {
 			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
 			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
 
@@ -301,19 +321,19 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(apiresponses.FailureResponse)
+			s, isFailureResponse := err.(*apiresponses.FailureResponse)
 			Expect(isFailureResponse).To(BeTrue())                            // must be a failure response
-			Expect(s.Error()).To(Equal("Not Found"))                          // must contain "Not Found" error message
+			Expect(s.Error()).To(Equal("not found"))                          // must contain "not found" error message
 			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
 
-			By("validating service provider is asked for instance status")
-			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(1))
-
 			By("validating storage is asked for instance details")
 			Expect(fakeStorage.GetServiceInstanceDetailsCallCount()).To(Equal(1))
+
+			By("validating service provider is asked for instance status")
+			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(0))
 
 			By("validating storage is not asked for provision request details")
 			Expect(fakeStorage.GetProvisionRequestDetailsCallCount()).To(Equal(0))
@@ -323,7 +343,6 @@ var _ = Describe("GetInstance", func() {
 	When("plan_id is not set", func() {
 		BeforeEach(func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetServiceInstanceDetailsReturns(
 				storage.ServiceInstanceDetails{
 					GUID:             instanceID,
@@ -334,6 +353,7 @@ var _ = Describe("GetInstance", func() {
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
 				}, nil)
+			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
 		})
 		It("ignores plan_id and returns instance details", func() {
@@ -349,7 +369,6 @@ var _ = Describe("GetInstance", func() {
 	When("plan_id does not match plan for instance", func() {
 		BeforeEach(func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetServiceInstanceDetailsReturns(
 				storage.ServiceInstanceDetails{
 					GUID:             instanceID,
@@ -360,9 +379,10 @@ var _ = Describe("GetInstance", func() {
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
 				}, nil)
+			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
 			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
 		})
-		It("returns 404 (Not Found)", func() {
+		It("returns 404 (not found)", func() {
 			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
 			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
 
@@ -372,28 +392,22 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(apiresponses.FailureResponse)
+			s, isFailureResponse := err.(*apiresponses.FailureResponse)
 			Expect(isFailureResponse).To(BeTrue())                            // must be a failure response
-			Expect(s.Error()).To(Equal("Not Found"))                          // must contain "Not Found" error message
+			Expect(s.Error()).To(Equal("not found"))                          // must contain "not found" error message
 			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
 
-			By("validating service provider is asked for instance status")
-			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(1))
-
 			By("validating storage is asked for instance details")
 			Expect(fakeStorage.GetServiceInstanceDetailsCallCount()).To(Equal(1))
+
+			By("validating service provider is asked for instance status")
+			Expect(fakeServiceProvider.PollInstanceCallCount()).To(Equal(0))
 
 			By("validating storage is not asked for provision request details")
 			Expect(fakeStorage.GetProvisionRequestDetailsCallCount()).To(Equal(0))
 		})
 	})
-
-	// todo: returns error when validation for instance_id fails
-
-	// todo: returns error when validation for service_id fails
-
-	// todo: returns error when validation for plan_id fails (must be non-empty strings)
 })
