@@ -2,21 +2,13 @@ package broker
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 
 	"code.cloudfoundry.org/lager/v3"
 	"github.com/pivotal-cf/brokerapi/v11/domain"
-	"github.com/pivotal-cf/brokerapi/v11/domain/apiresponses"
 
 	"github.com/cloudfoundry/cloud-service-broker/v2/dbservice/models"
 	"github.com/cloudfoundry/cloud-service-broker/v2/utils/correlation"
-)
-
-var (
-	ErrNotFound         = apiresponses.NewFailureResponse(errors.New("not found"), http.StatusNotFound, "not-found")
-	ErrConcurrencyError = apiresponses.NewFailureResponse(errors.New("ConcurrencyError"), http.StatusUnprocessableEntity, "concurrency-error")
 )
 
 // GetInstance fetches information about a service instance

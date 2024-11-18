@@ -159,10 +159,10 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(*apiresponses.FailureResponse)
-			Expect(isFailureResponse).To(BeTrue())                            // must be a failure response
-			Expect(s.Error()).To(Equal("not found"))                          // must contain "Not Found" error message
-			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
+			apiErr, isFailureResponse := err.(*apiresponses.FailureResponse)
+			Expect(isFailureResponse).To(BeTrue())                                 // must be a failure response
+			Expect(apiErr.Error()).To(Equal("not found"))                          // must contain "Not Found" error message
+			Expect(apiErr.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
@@ -204,10 +204,10 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(*apiresponses.FailureResponse)
-			Expect(isFailureResponse).To(BeTrue())                            // must be a failure response
-			Expect(s.Error()).To(Equal("not found"))                          // must contain "not found" error message
-			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
+			apiErr, isFailureResponse := err.(*apiresponses.FailureResponse)
+			Expect(isFailureResponse).To(BeTrue())                                 // must be a failure response
+			Expect(apiErr.Error()).To(Equal("not found"))                          // must contain "not found" error message
+			Expect(apiErr.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
@@ -249,10 +249,10 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(*apiresponses.FailureResponse)
-			Expect(isFailureResponse).To(BeTrue())                                       // must be a failure response
-			Expect(s.Error()).To(Equal("ConcurrencyError"))                              // must contain "ConcurrencyError" error message
-			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusUnprocessableEntity)) // status code must be 404
+			apiErr, isFailureResponse := err.(*apiresponses.FailureResponse)
+			Expect(isFailureResponse).To(BeTrue())                                            // must be a failure response
+			Expect(apiErr.Error()).To(Equal("ConcurrencyError"))                              // must contain "ConcurrencyError" error message
+			Expect(apiErr.ValidatedStatusCode(nil)).To(Equal(http.StatusUnprocessableEntity)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
@@ -321,10 +321,10 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(*apiresponses.FailureResponse)
-			Expect(isFailureResponse).To(BeTrue())                            // must be a failure response
-			Expect(s.Error()).To(Equal("not found"))                          // must contain "not found" error message
-			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
+			apiErr, isFailureResponse := err.(*apiresponses.FailureResponse)
+			Expect(isFailureResponse).To(BeTrue())                                 // must be a failure response
+			Expect(apiErr.Error()).To(Equal("not found"))                          // must contain "not found" error message
+			Expect(apiErr.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
@@ -392,10 +392,10 @@ var _ = Describe("GetInstance", func() {
 			Expect(response).To(BeZero())
 
 			By("validating error")
-			s, isFailureResponse := err.(*apiresponses.FailureResponse)
-			Expect(isFailureResponse).To(BeTrue())                            // must be a failure response
-			Expect(s.Error()).To(Equal("not found"))                          // must contain "not found" error message
-			Expect(s.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
+			apiErr, isFailureResponse := err.(*apiresponses.FailureResponse)
+			Expect(isFailureResponse).To(BeTrue())                                 // must be a failure response
+			Expect(apiErr.Error()).To(Equal("not found"))                          // must contain "not found" error message
+			Expect(apiErr.ValidatedStatusCode(nil)).To(Equal(http.StatusNotFound)) // status code must be 404
 
 			By("validating storage is asked whether instance exists")
 			Expect(fakeStorage.ExistsServiceInstanceDetailsCallCount()).To(Equal(1))
