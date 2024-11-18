@@ -40,21 +40,7 @@ var _ = Describe("GetInstance", func() {
 
 		brokerConfig *broker.BrokerConfig
 
-		provisionParams = storage.JSONObject{
-			"param1": "value1",
-			"param2": 3,
-			"param3": true,
-			"param4": []string{"a", "b", "c"},
-			"param5": map[string]string{"key1": "value", "key2": "value"},
-			"param6": struct {
-				A string
-				B string
-			}{"a", "b"},
-		}
-
-		fetchInstanceID = instanceID
-		fetchServiceID  = offeringID
-		fetchPlanID     = planID
+		provisionParams *storage.JSONObject
 	)
 
 	BeforeEach(func() {
@@ -86,33 +72,43 @@ var _ = Describe("GetInstance", func() {
 		}
 
 		serviceBroker = must(broker.New(brokerConfig, fakeStorage, utils.NewLogger("get-instance-test")))
+
+		provisionParams = &storage.JSONObject{
+			"param1": "value1",
+			"param2": 3,
+			"param3": true,
+			"param4": []string{"a", "b", "c"},
+			"param5": map[string]string{"key1": "value", "key2": "value"},
+			"param6": struct {
+				A string
+				B string
+			}{"a", "b"},
+		}
+
+		fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
+		fakeStorage.GetServiceInstanceDetailsReturns(
+			storage.ServiceInstanceDetails{
+				GUID:             instanceID,
+				Name:             "test-instance",
+				Outputs:          storage.JSONObject{},
+				ServiceGUID:      offeringID,
+				PlanGUID:         planID,
+				SpaceGUID:        spaceID,
+				OrganizationGUID: orgID,
+			}, nil)
+		fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
+		fakeStorage.GetProvisionRequestDetailsReturns(*provisionParams, nil)
 	})
 
 	When("instance exists and provision succeeded", func() {
-		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
-			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
-		})
-
 		It("returns instance details", func() {
-			response, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: planID})
 			Expect(err).ToNot(HaveOccurred())
 
 			By("validating response")
 			Expect(response.ServiceID).To(Equal(offeringID))
 			Expect(response.PlanID).To(Equal(planID))
-			Expect(response.Parameters).To(BeEquivalentTo(provisionParams))
+			Expect(response.Parameters).To(BeEquivalentTo(*provisionParams))
 			Expect(response.DashboardURL).To(BeEmpty()) // Broker does not set dashboard URL
 			Expect(response.Metadata).To(BeZero())      // Broker does not support instance metadata
 
@@ -135,7 +131,7 @@ var _ = Describe("GetInstance", func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(false, nil)
 		})
 		It("returns status code 404 (not found)", func() {
-			response, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: planID})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -162,22 +158,11 @@ var _ = Describe("GetInstance", func() {
 
 	When("instance exists and provision is in progress", func() {
 		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
 			fakeServiceProvider.PollInstanceReturns(false, "", models.ProvisionOperationType, nil) // Operation status is provision in progress
 		})
 		// According to OSB Spec, broker must return 404 in case provision is in progress
 		It("returns status code 404 (not found)", func() {
-			response, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: planID})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -205,21 +190,10 @@ var _ = Describe("GetInstance", func() {
 
 	When("instance exists and update is in progress", func() {
 		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
 			fakeServiceProvider.PollInstanceReturns(false, "", models.UpdateOperationType, nil) // Operation status is update in progress
 		})
 		It("returns status code 422 (Unprocessable Entity) and error code ConcurrencyError", func() {
-			response, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: planID})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -246,46 +220,16 @@ var _ = Describe("GetInstance", func() {
 	})
 
 	When("service_id is not set", func() {
-		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
-			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
-		})
 		It("ignores service_id and returns instance details", func() {
-			response, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{PlanID: fetchPlanID})
+			response, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{PlanID: planID})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response.ServiceID).To(Equal(offeringID))
 		})
 	})
 
 	When("service_id does not match service for instance", func() {
-		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
-			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
-		})
 		It("returns 404 (not found)", func() {
-			response, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: "otherService", PlanID: fetchPlanID})
+			response, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: "otherService", PlanID: planID})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -311,46 +255,16 @@ var _ = Describe("GetInstance", func() {
 	})
 
 	When("plan_id is not set", func() {
-		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
-			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
-		})
 		It("ignores plan_id and returns instance details", func() {
-			response, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID})
+			response, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response.ServiceID).To(Equal(offeringID))
 		})
 	})
 
 	When("plan_id does not match plan for instance", func() {
-		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil) // Operation status is provision succeeded
-			fakeStorage.GetProvisionRequestDetailsReturns(provisionParams, nil)
-		})
 		It("returns 404 (not found)", func() {
-			response, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: "otherPlan"})
+			response, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: "otherPlan"})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -383,7 +297,7 @@ var _ = Describe("GetInstance", func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(false, errors.New(msg))
 		})
 		It("should error", func() {
-			_, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: "otherPlan"})
+			_, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: "otherPlan"})
 			Expect(err).To(MatchError(fmt.Sprintf(`error checking for existing instance: %s`, msg)))
 		})
 	})
@@ -392,11 +306,10 @@ var _ = Describe("GetInstance", func() {
 			msg = "error-msg"
 		)
 		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
 			fakeStorage.GetServiceInstanceDetailsReturns(storage.ServiceInstanceDetails{}, errors.New(msg))
 		})
 		It("should error", func() {
-			_, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: "otherPlan"})
+			_, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: "otherPlan"})
 			Expect(err).To(MatchError(fmt.Sprintf(`error retrieving service instance details: %s`, msg)))
 		})
 	})
@@ -405,21 +318,10 @@ var _ = Describe("GetInstance", func() {
 			msg = "error-msg"
 		)
 		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
 			fakeServiceProvider.PollInstanceReturns(false, "", "", errors.New(msg))
 		})
 		It("should error", func() {
-			_, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			_, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: planID})
 			Expect(err).To(MatchError(fmt.Sprintf(`error polling instance status: %s`, msg)))
 		})
 	})
@@ -428,22 +330,10 @@ var _ = Describe("GetInstance", func() {
 			msg = "error-msg"
 		)
 		BeforeEach(func() {
-			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
-			fakeStorage.GetServiceInstanceDetailsReturns(
-				storage.ServiceInstanceDetails{
-					GUID:             instanceID,
-					Name:             "test-instance",
-					Outputs:          storage.JSONObject{},
-					ServiceGUID:      offeringID,
-					PlanGUID:         planID,
-					SpaceGUID:        spaceID,
-					OrganizationGUID: orgID,
-				}, nil)
-			fakeServiceProvider.PollInstanceReturns(true, "", models.ProvisionOperationType, nil)
 			fakeStorage.GetProvisionRequestDetailsReturns(nil, errors.New(msg))
 		})
 		It("should error", func() {
-			_, err := serviceBroker.GetInstance(context.TODO(), fetchInstanceID, domain.FetchInstanceDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			_, err := serviceBroker.GetInstance(context.TODO(), instanceID, domain.FetchInstanceDetails{ServiceID: offeringID, PlanID: planID})
 			Expect(err).To(MatchError(fmt.Sprintf(`error retrieving provision request details: %s`, msg)))
 		})
 	})
