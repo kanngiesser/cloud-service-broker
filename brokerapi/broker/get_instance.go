@@ -23,7 +23,7 @@ func (broker *ServiceBroker) GetInstance(ctx context.Context, instanceID string,
 	// check whether instance exists
 	exists, err := broker.store.ExistsServiceInstanceDetails(instanceID)
 	if err != nil {
-		return domain.GetInstanceDetailsSpec{}, err
+		return domain.GetInstanceDetailsSpec{}, fmt.Errorf("error checking for existing instance: %w", err)
 	}
 	if !exists {
 		return domain.GetInstanceDetailsSpec{}, ErrNotFound
@@ -46,12 +46,12 @@ func (broker *ServiceBroker) GetInstance(ctx context.Context, instanceID string,
 	// get instance status
 	_, serviceProvider, err := broker.getDefinitionAndProvider(instanceRecord.ServiceGUID)
 	if err != nil {
-		return domain.GetInstanceDetailsSpec{}, err
+		return domain.GetInstanceDetailsSpec{}, fmt.Errorf("error retrieving service definition: %w", err)
 	}
 
 	done, _, lastOperationType, err := serviceProvider.PollInstance(ctx, instanceRecord.GUID)
 	if err != nil {
-		return domain.GetInstanceDetailsSpec{}, err
+		return domain.GetInstanceDetailsSpec{}, fmt.Errorf("error polling instance status: %w", err)
 	}
 
 	switch lastOperationType {
@@ -68,7 +68,7 @@ func (broker *ServiceBroker) GetInstance(ctx context.Context, instanceID string,
 	// get provision parameters
 	params, err := broker.store.GetProvisionRequestDetails(instanceID)
 	if err != nil {
-		return domain.GetInstanceDetailsSpec{}, err
+		return domain.GetInstanceDetailsSpec{}, fmt.Errorf("error retrieving provision request details: %w", err)
 	}
 
 	return domain.GetInstanceDetailsSpec{

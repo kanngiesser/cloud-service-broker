@@ -2,6 +2,8 @@ package broker_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"code.cloudfoundry.org/lager/v3"
@@ -10,14 +12,11 @@ import (
 	"github.com/cloudfoundry/cloud-service-broker/v2/internal/storage"
 	pkgBroker "github.com/cloudfoundry/cloud-service-broker/v2/pkg/broker"
 	pkgBrokerFakes "github.com/cloudfoundry/cloud-service-broker/v2/pkg/broker/brokerfakes"
-	"github.com/cloudfoundry/cloud-service-broker/v2/pkg/credstore/credstorefakes"
-	"github.com/cloudfoundry/cloud-service-broker/v2/pkg/varcontext"
 	"github.com/cloudfoundry/cloud-service-broker/v2/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pivotal-cf/brokerapi/v11/domain"
 	"github.com/pivotal-cf/brokerapi/v11/domain/apiresponses"
-	"github.com/pivotal-cf/brokerapi/v11/middlewares"
 )
 
 var _ = Describe("GetBinding", func() {
@@ -25,7 +24,6 @@ var _ = Describe("GetBinding", func() {
 		orgID      = "test-org-id"
 		spaceID    = "test-space-id"
 		planID     = "test-plan-id"
-		serviceID  = "test-service-id"
 		offeringID = "test-service-id"
 		instanceID = "test-instance-id"
 		bindingID  = "test-binding-id"
@@ -36,7 +34,6 @@ var _ = Describe("GetBinding", func() {
 
 		fakeStorage         *brokerfakes.FakeStorage
 		fakeServiceProvider *pkgBrokerFakes.FakeServiceProvider
-		fakeCredStore       *credstorefakes.FakeCredStore
 
 		brokerConfig *broker.BrokerConfig
 
@@ -54,14 +51,13 @@ var _ = Describe("GetBinding", func() {
 
 		fetchBindingID  = bindingID
 		fetchInstanceID = instanceID
-		fetchServiceID  = serviceID
+		fetchServiceID  = offeringID
 		fetchPlanID     = planID
 	)
 
 	BeforeEach(func() {
 		fakeStorage = &brokerfakes.FakeStorage{}
 		fakeServiceProvider = &pkgBrokerFakes.FakeServiceProvider{}
-		fakeCredStore = &credstorefakes.FakeCredStore{}
 
 		providerBuilder := func(logger lager.Logger, store pkgBroker.ServiceProviderStorage) pkgBroker.ServiceProvider {
 			return fakeServiceProvider
@@ -81,22 +77,14 @@ var _ = Describe("GetBinding", func() {
 								Name:          "test-plan",
 								PlanUpdatable: &planUpdatable,
 							},
-							ServiceProperties: map[string]any{
-								"plan-defined-key":       "plan-defined-value",
-								"other-plan-defined-key": "other-plan-defined-value",
-							},
 						},
-					},
-					BindComputedVariables: []varcontext.DefaultVariable{
-						{Name: "copyOriginatingIdentity", Default: "${json.marshal(request.x_broker_api_originating_identity)}", Overwrite: true},
 					},
 					ProviderBuilder: providerBuilder,
 				},
 			},
-			Credstore: fakeCredStore,
 		}
 
-		serviceBroker = must(broker.New(brokerConfig, fakeStorage, utils.NewLogger("unbind-test-with-credstore")))
+		serviceBroker = must(broker.New(brokerConfig, fakeStorage, utils.NewLogger("get-binding-test")))
 	})
 
 	When("binding exsists", func() {
@@ -107,7 +95,7 @@ var _ = Describe("GetBinding", func() {
 					GUID:             instanceID,
 					Name:             "test-instance",
 					Outputs:          storage.JSONObject{},
-					ServiceGUID:      serviceID,
+					ServiceGUID:      offeringID,
 					PlanGUID:         planID,
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
@@ -116,10 +104,7 @@ var _ = Describe("GetBinding", func() {
 			fakeStorage.GetBindRequestDetailsReturns(bindingParams, nil)
 		})
 		It("returns binding details and parameters", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
 			Expect(err).ToNot(HaveOccurred())
 
 			By("validating response")
@@ -139,10 +124,7 @@ var _ = Describe("GetBinding", func() {
 			Expect(fakeStorage.GetBindRequestDetailsCallCount()).To(Equal(1))
 		})
 		It("does not return binding credentials", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
 			Expect(err).ToNot(HaveOccurred())
 
 			By("validating response")
@@ -152,10 +134,7 @@ var _ = Describe("GetBinding", func() {
 			Expect(fakeStorage.GetServiceBindingCredentialsCallCount()).To(Equal(0))
 		})
 		It("does not return binding metadata", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
 			Expect(err).ToNot(HaveOccurred())
 
 			By("validating response")
@@ -172,17 +151,14 @@ var _ = Describe("GetBinding", func() {
 					GUID:             instanceID,
 					Name:             "test-instance",
 					Outputs:          storage.JSONObject{},
-					ServiceGUID:      serviceID,
+					ServiceGUID:      offeringID,
 					PlanGUID:         planID,
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
 				}, nil)
 		})
 		It("returns status code 400 (bad request)", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -212,10 +188,7 @@ var _ = Describe("GetBinding", func() {
 			fakeStorage.ExistsServiceInstanceDetailsReturns(false, nil)
 		})
 		It("returns status code 404 (not found)", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -248,7 +221,7 @@ var _ = Describe("GetBinding", func() {
 					GUID:             instanceID,
 					Name:             "test-instance",
 					Outputs:          storage.JSONObject{},
-					ServiceGUID:      serviceID,
+					ServiceGUID:      offeringID,
 					PlanGUID:         planID,
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
@@ -256,10 +229,7 @@ var _ = Describe("GetBinding", func() {
 			fakeStorage.ExistsServiceBindingCredentialsReturns(false, nil)
 		})
 		It("returns status code 404 (not found)", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -301,7 +271,7 @@ var _ = Describe("GetBinding", func() {
 					GUID:             instanceID,
 					Name:             "test-instance",
 					Outputs:          storage.JSONObject{},
-					ServiceGUID:      serviceID,
+					ServiceGUID:      offeringID,
 					PlanGUID:         planID,
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
@@ -310,10 +280,7 @@ var _ = Describe("GetBinding", func() {
 			fakeStorage.GetBindRequestDetailsReturns(bindingParams, nil)
 		})
 		It("ignores service_id and returns binding details", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{PlanID: fetchPlanID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{PlanID: fetchPlanID})
 			Expect(err).ToNot(HaveOccurred())
 
 			By("validating response")
@@ -329,7 +296,7 @@ var _ = Describe("GetBinding", func() {
 					GUID:             instanceID,
 					Name:             "test-instance",
 					Outputs:          storage.JSONObject{},
-					ServiceGUID:      serviceID,
+					ServiceGUID:      offeringID,
 					PlanGUID:         planID,
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
@@ -338,10 +305,7 @@ var _ = Describe("GetBinding", func() {
 			fakeStorage.GetBindRequestDetailsReturns(bindingParams, nil)
 		})
 		It("returns status code 404 (not found)", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: "otherService", PlanID: fetchPlanID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: "otherService", PlanID: fetchPlanID})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -374,7 +338,7 @@ var _ = Describe("GetBinding", func() {
 					GUID:             instanceID,
 					Name:             "test-instance",
 					Outputs:          storage.JSONObject{},
-					ServiceGUID:      serviceID,
+					ServiceGUID:      offeringID,
 					PlanGUID:         planID,
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
@@ -383,10 +347,7 @@ var _ = Describe("GetBinding", func() {
 			fakeStorage.GetBindRequestDetailsReturns(bindingParams, nil)
 		})
 		It("ignores plan_id and returns binding details", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID})
 			Expect(err).ToNot(HaveOccurred())
 
 			By("validating response")
@@ -402,7 +363,7 @@ var _ = Describe("GetBinding", func() {
 					GUID:             instanceID,
 					Name:             "test-instance",
 					Outputs:          storage.JSONObject{},
-					ServiceGUID:      serviceID,
+					ServiceGUID:      offeringID,
 					PlanGUID:         planID,
 					SpaceGUID:        spaceID,
 					OrganizationGUID: orgID,
@@ -411,10 +372,7 @@ var _ = Describe("GetBinding", func() {
 			fakeStorage.GetBindRequestDetailsReturns(bindingParams, nil)
 		})
 		It("returns status code 404 (not found)", func() {
-			const expectedHeader = "cloudfoundry eyANCiAgInVzZXJfaWQiOiAiNjgzZWE3NDgtMzA5Mi00ZmY0LWI2NTYtMzljYWNjNGQ1MzYwIg0KfQ=="
-			newContext := context.WithValue(context.Background(), middlewares.OriginatingIdentityKey, expectedHeader)
-
-			response, err := serviceBroker.GetBinding(newContext, fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: "otherPlan"})
+			response, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: "otherPlan"})
 
 			By("validating response")
 			Expect(response).To(BeZero())
@@ -436,6 +394,78 @@ var _ = Describe("GetBinding", func() {
 
 			By("validating storage is not asked for bind request details")
 			Expect(fakeStorage.GetBindRequestDetailsCallCount()).To(Equal(0))
+		})
+	})
+	When("fails to check instance existence", func() {
+		const (
+			msg = "error-msg"
+		)
+		BeforeEach(func() {
+			fakeStorage.ExistsServiceInstanceDetailsReturns(false, errors.New(msg))
+		})
+		It("returns error", func() {
+			_, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			Expect(err).To(MatchError(fmt.Sprintf(`error checking for existing instance: %s`, msg)))
+		})
+	})
+	When("fails to retrieve instance details", func() {
+		const (
+			msg = "error-msg"
+		)
+		BeforeEach(func() {
+			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
+			fakeStorage.GetServiceInstanceDetailsReturns(storage.ServiceInstanceDetails{}, errors.New(msg))
+		})
+		It("returns error", func() {
+			_, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			Expect(err).To(MatchError(fmt.Sprintf(`error retrieving service instance details: %s`, msg)))
+		})
+	})
+	When("fails to check binding existence", func() {
+		const (
+			msg = "error-msg"
+		)
+		BeforeEach(func() {
+			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
+			fakeStorage.GetServiceInstanceDetailsReturns(
+				storage.ServiceInstanceDetails{
+					GUID:             instanceID,
+					Name:             "test-instance",
+					Outputs:          storage.JSONObject{},
+					ServiceGUID:      offeringID,
+					PlanGUID:         planID,
+					SpaceGUID:        spaceID,
+					OrganizationGUID: orgID,
+				}, nil)
+			fakeStorage.ExistsServiceBindingCredentialsReturns(false, errors.New(msg))
+		})
+		It("returns error", func() {
+			_, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			Expect(err).To(MatchError(fmt.Sprintf(`error checking for existing binding: %s`, msg)))
+		})
+	})
+	When("fails to retrieve bind request details", func() {
+		const (
+			msg = "error-msg"
+		)
+		BeforeEach(func() {
+			fakeStorage.ExistsServiceInstanceDetailsReturns(true, nil)
+			fakeStorage.GetServiceInstanceDetailsReturns(
+				storage.ServiceInstanceDetails{
+					GUID:             instanceID,
+					Name:             "test-instance",
+					Outputs:          storage.JSONObject{},
+					ServiceGUID:      offeringID,
+					PlanGUID:         planID,
+					SpaceGUID:        spaceID,
+					OrganizationGUID: orgID,
+				}, nil)
+			fakeStorage.ExistsServiceBindingCredentialsReturns(true, nil)
+			fakeStorage.GetBindRequestDetailsReturns(storage.JSONObject{}, errors.New(msg))
+		})
+		It("returns error", func() {
+			_, err := serviceBroker.GetBinding(context.TODO(), fetchInstanceID, fetchBindingID, domain.FetchBindingDetails{ServiceID: fetchServiceID, PlanID: fetchPlanID})
+			Expect(err).To(MatchError(fmt.Sprintf(`error retrieving bind request details: %s`, msg)))
 		})
 	})
 })

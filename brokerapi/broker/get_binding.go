@@ -23,7 +23,7 @@ func (broker *ServiceBroker) GetBinding(ctx context.Context, instanceID, binding
 	// check whether instance exists
 	instanceExists, err := broker.store.ExistsServiceInstanceDetails(instanceID)
 	if err != nil {
-		return domain.GetBindingSpec{}, err
+		return domain.GetBindingSpec{}, fmt.Errorf("error checking for existing instance: %w", err)
 	}
 	if !instanceExists {
 		return domain.GetBindingSpec{}, ErrNotFound
@@ -57,7 +57,7 @@ func (broker *ServiceBroker) GetBinding(ctx context.Context, instanceID, binding
 	//   therefore, we can assume the binding operation is completed if it exists at the store
 	bindingExists, err := broker.store.ExistsServiceBindingCredentials(bindingID, instanceID)
 	if err != nil {
-		return domain.GetBindingSpec{}, err
+		return domain.GetBindingSpec{}, fmt.Errorf("error checking for existing binding: %w", err)
 	}
 	if !bindingExists {
 		return domain.GetBindingSpec{}, ErrNotFound
@@ -66,7 +66,7 @@ func (broker *ServiceBroker) GetBinding(ctx context.Context, instanceID, binding
 	// get binding parameters
 	params, err := broker.store.GetBindRequestDetails(bindingID, instanceID)
 	if err != nil {
-		return domain.GetBindingSpec{}, err
+		return domain.GetBindingSpec{}, fmt.Errorf("error retrieving bind request details: %w", err)
 	}
 
 	// broker does not support Log Drain, Route Services, or Volume Mounts
